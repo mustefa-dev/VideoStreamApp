@@ -7,19 +7,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("CorsPolicy", builder =>
-        builder.WithOrigins("http://localhost:8083")
+        builder.WithOrigins("http://localhost:3000")
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials());
 });
 
+builder.Services.AddControllers();
 
 builder.Services.AddSignalR();
 
 var app = builder.Build();
 app.UseCors("CorsPolicy");
-
-
-app.MapHub<VideoStreamHub>("/videoStreamHub");
+app.MapControllers();
+app.MapHub<VideoSyncHub>("/videosync");
 
 app.Run();
