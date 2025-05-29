@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("VideoStreamApp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c78dd7665e978acdfd7dc3f08c0e48f7d3285630")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a9c2a2c99f6aef649470ed03b1197c2416d40e7b")]
 [assembly: System.Reflection.AssemblyProductAttribute("VideoStreamApp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("VideoStreamApp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
