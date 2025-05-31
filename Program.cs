@@ -1,41 +1,26 @@
-
-using Microsoft.AspNetCore.SignalR;
-using System.Collections.Concurrent;
 using VideoStreamApp.Hubs;
-using VideoStreamApp.Models;
-using VideoStreamApp.Service;
+using VideoStreamApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
-builder.Services.AddSignalR();
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", policy =>
-    {
-        policy.WithOrigins("http://localhost:8082")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
+    options.AddPolicy("CorsPolicy", builder =>
+        builder.WithOrigins("http://localhost:3001", "https://localhost:3000")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials());
 });
 
-builder.Services.AddSingleton<IRoomService, RoomService>();
+builder.Services.AddControllers();
+
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IFileService, FileService>();
 
 var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseDeveloperExceptionPage();
-}
-
-app.UseCors("AllowReactApp");
-app.UseRouting();
+app.UseCors("CorsPolicy");
 app.MapControllers();
-app.MapHub<VideoHub>("/videohub");
+app.MapHub<VideoSyncHub>("/videosync");
 
-app.Run("http://localhost:5000");
-
-
-
+app.Run();
 
