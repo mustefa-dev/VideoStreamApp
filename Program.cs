@@ -1,5 +1,4 @@
 using VideoStreamApp.Hubs;
-using VideoStreamApp.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,12 +14,11 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 
 builder.Services.AddSignalR();
-builder.Services.AddScoped<IFileService, FileService>();
 
 var app = builder.Build();
 app.UseCors("CorsPolicy");
 app.MapControllers();
-app.MapHub<VideoSyncHub>("/videosync");
+app.MapHub<VideoHub>("/videosync");
 
 app.Run();
 
