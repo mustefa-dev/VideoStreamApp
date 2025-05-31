@@ -1,38 +1,41 @@
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 
-namespace VideoStreamApp.Services
+
+namespace BookStore.Services
 {
-    public class FileService : IFileService
+    
+    public interface IFileService {
+        Task<(string? file , string? error)> Upload(IFormFile file);
+        Task<(List<string>? files , string? error)> Upload(IFormFile[] files);
+    }
+    
+    public class FileService  : IFileService
     {
-        private readonly IWebHostEnvironment _env;
-        public FileService(IWebHostEnvironment env)
-        {
-            _env = env;
+
+        public async Task<(string? file , string? error)> Upload(IFormFile file) {
+            var id = Guid.NewGuid();
+            var extension = Path.GetExtension(file.FileName);
+            var fileName = $"{id}{extension}";
+
+            var attachmentsDir = Path.Combine(Directory.GetCurrentDirectory(),
+                "wwwroot", "Attachments");
+            if (!File.Exists(attachmentsDir)) Directory.CreateDirectory(attachmentsDir);
+
+
+            var path = Path.Combine(attachmentsDir, fileName);
+            await using var stream = new FileStream(path, FileMode.Create);
+            await file.CopyToAsync(stream);
+            var filePath = Path.Combine("Attachments", fileName);
+            return (filePath , null);
         }
-
-        public async Task<string> SaveFileAsync(IFormFile file)
+        public async Task<(List<string> files , string? error)> Upload(IFormFile[] files)
         {
-            if (file == null || file.Length == 0)
-                throw new ArgumentException("File is empty");
-
-            var uploadsFolder = Path.Combine(_env.WebRootPath, "uploads");
-            if (!Directory.Exists(uploadsFolder))
-                Directory.CreateDirectory(uploadsFolder);
-
-            var fileName = Guid.NewGuid() + Path.GetExtension(file.FileName);
-            var filePath = Path.Combine(uploadsFolder, fileName);
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
+            var fileList = new List<string>();
+            foreach (var file in files)
+            { 
+                var fileToAdd = await Upload(file);
+                fileList.Add(fileToAdd.file!);
             }
-
-            return $"uploads/{fileName}";
+            return (fileList , null);
         }
     }
 }
-
