@@ -1,43 +1,26 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.SignalR;
 using VideoStreamApp.Hubs;
-using VideoStreamApp.Service;
-using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddCors(options =>
+builder.Services.AddSignalR(options =>
 {
-    options.AddPolicy("CorsPolicy", builder =>
-        builder.WithOrigins("http://localhost:8082", "https://localhost:3000")
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials());
-});
-
-builder.Services.AddControllers();
-
-builder.Services.AddSignalR();
-builder.Services.AddSingleton<IRoomService, RoomService>();
-
-// Add Swagger services
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+    options.MaximumReceiveMessageSize = 1024 * 1024; 
+});builder.Services.AddCors(options =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "VideoStreamApp API", Version = "v1" });
-});
-
-var app = builder.Build();
-app.UseCors("CorsPolicy");
-app.MapControllers();
-app.MapHub<VideoHub>("/videohub");
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
+    options.AddDefaultPolicy(policy =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "VideoStreamApp API V1");
-        c.RoutePrefix = string.Empty; 
+        policy.AllowAnyHeader()
+            .AllowAnyMethod()
+            .WithOrigins("http://localhost:8081", "http://localhost:5139")
+            .AllowCredentials();
     });
-}
+});
+var app = builder.Build();
+
+app.UseCors();
+
+app.MapHub<MovieHub>("/moviehub");
 
 app.Run();
