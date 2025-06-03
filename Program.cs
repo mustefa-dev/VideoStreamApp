@@ -13,7 +13,8 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                 "http://localhost:8081",
                 "http://localhost:5139",
-                "https://farah-movie-cyan.vercel.app"
+                "https://farah-movie-cyan.vercel.app",
+                "http://217.76.57.87:3030"
             )
             .AllowCredentials();
     });
@@ -25,3 +26,4 @@ app.UseCors();
 app.MapHub<MovieHub>("/moviehub");
 
 app.Run();
+
