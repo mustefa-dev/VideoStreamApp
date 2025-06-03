@@ -20,6 +20,17 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Version = "v1",
+        Title = "VideoStreamApp API",
+        Description = "API documentation for VideoStreamApp"
+    });
+    options.AddServer(new Microsoft.OpenApi.Models.OpenApiServer { Url = "http://217.76.57.87:3030/" });
+});
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
