@@ -4,16 +4,17 @@ using Microsoft.AspNetCore.SignalR;
 using VideoStreamApp.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSignalR(options =>
-{
-    options.MaximumReceiveMessageSize = 1024 * 1024; 
-});builder.Services.AddCors(options =>
+builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
         policy.AllowAnyHeader()
             .AllowAnyMethod()
-            .WithOrigins("http://localhost:8081", "http://localhost:5139")
+            .WithOrigins(
+                "http://localhost:8081",
+                "http://localhost:5139",
+                "https://farah-movie-cyan.vercel.app"
+            )
             .AllowCredentials();
     });
 });
