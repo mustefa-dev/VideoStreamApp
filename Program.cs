@@ -19,11 +19,21 @@ builder.Services.AddCors(options =>
             .AllowCredentials();
     });
 });
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 app.UseCors();
 
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "VideoStreamApp API V1");
+    c.RoutePrefix = "swagger";
+});
 app.MapHub<MovieHub>("/moviehub");
+
+app.MapGet("/weather", () => new { TemperatureC = 25, Summary = "Sunny" });
 
 app.Run();
 
