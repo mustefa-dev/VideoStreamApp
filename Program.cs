@@ -14,7 +14,8 @@ builder.Services.AddCors(options =>
                 "http://localhost:8081",
                 "http://localhost:5139",
                 "https://farah-movie-cyan.vercel.app",
-                "http://217.76.57.87:3030"
+                "http://217.76.57.87:3030",
+                "https://video-hub.mooo.com"
             )
             .AllowCredentials();
     });
