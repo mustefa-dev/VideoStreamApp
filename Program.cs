@@ -1,14 +1,13 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using VideoStreamApp.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddCors(options =>
+// Add this for detailed errors
+builder.Services.AddSignalR().AddNewtonsoftJsonProtocol();
+
+builder.Services.AddCors(options => 
 {
-    options.AddPolicy("AllowVercel", policy =>
+    options.AddPolicy("AllowVercel", policy => 
     {
         policy.WithOrigins("https://farah-movie-cyan.vercel.app")
             .AllowAnyHeader()
@@ -17,14 +16,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddSignalR();
-
 var app = builder.Build();
 
-app.UseCors("AllowVercel");
-
 app.UseRouting();
+app.UseCors("AllowVercel"); 
 
-app.MapHub<MovieHub>("/moviehub").RequireCors("AllowVercel");
+app.MapHub<MovieHub>("/moviehub");
 
 app.Run();
