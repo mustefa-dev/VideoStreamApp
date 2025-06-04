@@ -2,7 +2,10 @@ using VideoStreamApp.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSignalR().AddNewtonsoftJsonProtocol();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 1024 * 1024; 
+}).AddNewtonsoftJsonProtocol();  
 
 builder.Services.AddCors(options => 
 {
