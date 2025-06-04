@@ -1,29 +1,30 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using VideoStreamApp.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
+    options.AddPolicy("AllowVercel", policy =>
     {
-        policy.AllowAnyHeader()
+        policy.WithOrigins("https://farah-movie-cyan.vercel.app")
+            .AllowAnyHeader()
             .AllowAnyMethod()
-            .WithOrigins(
-                "http://localhost:8081",
-                "http://localhost:5139",
-                "https://farah-movie-cyan.vercel.app",
-                "http://217.76.57.87:3030",
-                "https://video-hub.mooo.com"
-            )
             .AllowCredentials();
     });
 });
+
+builder.Services.AddSignalR();
+
 var app = builder.Build();
 
-app.UseCors();
+app.UseCors("AllowVercel");
 
-app.MapHub<MovieHub>("/moviehub");
+app.UseRouting();
+
+app.MapHub<MovieHub>("/moviehub").RequireCors("AllowVercel");
 
 app.Run();
