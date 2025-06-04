@@ -19,32 +19,10 @@ builder.Services.AddCors(options =>
             .AllowCredentials();
     });
 });
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
-    {
-        Version = "v1",
-        Title = "VideoStreamApp API",
-        Description = "API documentation for VideoStreamApp"
-    });
-    options.AddServer(new Microsoft.OpenApi.Models.OpenApiServer { Url = "http://217.76.57.87:3030/" });
-});
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 app.UseCors();
 
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "VideoStreamApp API V1");
-    c.RoutePrefix = "swagger";
-});
 app.MapHub<MovieHub>("/moviehub");
 
-app.MapGet("/weather", () => new { TemperatureC = 25, Summary = "Sunny" });
-
 app.Run();
-
