@@ -12,82 +12,24 @@ namespace VideoStreamApp.Hubs
             string HostConnectionId,
             List<(string Name, string ConnectionId)> Viewers,
             byte[]? SubtitleData,
-            string? SubtitleFileName
+            string? SubtitleFileName,
+            List<ChatMessage> ChatHistory
             )> _streams = new();
 
         private static ConcurrentDictionary<string, System.Timers.Timer> _cleanupTimers = new();
         private static ConcurrentDictionary<string, (string Action, double Time)> _playbackStates = new();
         private static Random _rand = new();
 
-        private static ConcurrentDictionary<string, List<(string Name, string Message, DateTime Timestamp, string Audio, string Type)>> _chatMessages = new();
-
-        public async Task CreateSession(string name, string videoUrl)
+        // Chat message model
+        public class ChatMessage
         {
-            var streamId = GenerateStreamId();
-            _streams[streamId] = (name, videoUrl, Context.ConnectionId, new(), null, null);
-            CancelCleanup(streamId);
-            await Clients.Caller.SendAsync("Created", streamId, videoUrl);
-        }
-
-        public async Task JoinSession(string name, string streamId)
-        {
-            if (!_streams.TryGetValue(streamId, out var session))
-            {
-                await Clients.Caller.SendAsync("Error", "Stream not found");
-                return;
-            }
-
-            session.Viewers.Add((name, Context.ConnectionId));
-            _streams[streamId] = session;
-            CancelCleanup(streamId);
-            await Clients.Caller.SendAsync("Joined", streamId, session.VideoUrl, session.HostName);
-        }
-
-        public async Task UploadSubtitle(string streamId, string base64SubtitleData, string fileName)
-        {
-            if (!_streams.TryGetValue(streamId, out var session)) return;
-            if (session.HostConnectionId != Context.ConnectionId) return;
-
-            byte[] subtitleData = Convert.FromBase64String(base64SubtitleData);
-
-            var updatedSession = (
-                session.HostName,
-                session.VideoUrl,
-                session.HostConnectionId,
-                session.Viewers,
-                subtitleData,
-                fileName
-            );
-
-            _streams[streamId] = updatedSession;
-        }
-
-        public async Task FetchSubtitle(string streamId)
-        {
-            if (!_streams.TryGetValue(streamId, out var session)) return;
-            if (session.SubtitleData == null) return;
-
-            string base64Data = Convert.ToBase64String(session.SubtitleData);
-            await Clients.Caller.SendAsync("SubtitleData", base64Data, session.SubtitleFileName);
-        }
-
-        public async Task VideoAction(string streamId, string action, double time)
-        {
-            if (!_streams.TryGetValue(streamId, out var session)) return;
-
-            // --- Changed: Any participant can broadcast video actions (host or viewer) ---
-            bool isParticipant = session.HostConnectionId == Context.ConnectionId ||
-                                 session.Viewers.Any(v => v.ConnectionId == Context.ConnectionId);
-            if (!isParticipant) return;
-
-            _playbackStates[streamId] = (action, time);
-
-            // Send to all participants, host + viewers
-            await Clients.Client(session.HostConnectionId).SendAsync("Action", action, time);
-            foreach (var viewer in session.Viewers)
-            {
-                await Clients.Client(viewer.ConnectionId).SendAsync("Action", action, time);
-            }
+            public string Sender { get; set; } = "";
+            public string? Text { get; set; } // Text content (emojis included)
+            public long Timestamp { get; set; } // Unix milliseconds
+            public string? AudioUrl { get; set; } // For voice messages
+            public double? AudioDuration { get; set; }
+            public string Type { get; set; } = "text"; // "text" or "audio"
+            public string? Id { get; set; }
         }
 
         public override async Task OnDisconnectedAsync(Exception exception)
@@ -116,6 +58,134 @@ namespace VideoStreamApp.Hubs
             }
 
             await base.OnDisconnectedAsync(exception);
+        }
+
+        public async Task CreateSession(string name, string videoUrl)
+        {
+            var streamId = GenerateStreamId();
+            _streams[streamId] = (name, videoUrl, Context.ConnectionId, new(), null, null, new List<ChatMessage>());
+            CancelCleanup(streamId);
+            await Clients.Caller.SendAsync("Created", streamId, videoUrl);
+        }
+
+        public async Task JoinSession(string name, string streamId)
+        {
+            if (!_streams.TryGetValue(streamId, out var session))
+            {
+                await Clients.Caller.SendAsync("Error", "Stream not found");
+                return;
+            }
+
+            session.Viewers.Add((name, Context.ConnectionId));
+            _streams[streamId] = session;
+            CancelCleanup(streamId);
+            await Clients.Caller.SendAsync("Joined", streamId, session.VideoUrl, session.HostName);
+
+            // Send chat history after joining
+            if (session.ChatHistory != null && session.ChatHistory.Count > 0)
+            {
+                await Clients.Caller.SendAsync("ChatHistory", session.ChatHistory);
+            }
+        }
+
+        public async Task SendMessage(string streamId, string sender, string text)
+        {
+            if (!_streams.TryGetValue(streamId, out var session)) return;
+
+            var msg = new ChatMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                Sender = sender,
+                Text = text,
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Type = "text"
+            };
+            session.ChatHistory.Add(msg);
+            _streams[streamId] = session;
+
+            await Clients.Client(session.HostConnectionId).SendAsync("ReceiveMessage", msg);
+            foreach (var viewer in session.Viewers)
+            {
+                await Clients.Client(viewer.ConnectionId).SendAsync("ReceiveMessage", msg);
+            }
+        }
+
+        public async Task SendVoiceMessage(string streamId, string sender, string base64Audio, double audioDuration)
+        {
+            if (!_streams.TryGetValue(streamId, out var session)) return;
+
+            // For demo, we store byte[] in-memory and generate a fake URL (in production, store to persistent storage)
+            var bytes = Convert.FromBase64String(base64Audio);
+            string audioUrl = $"data:audio/wav;base64,{base64Audio}";
+            var msg = new ChatMessage
+            {
+                Id = Guid.NewGuid().ToString(),
+                Sender = sender,
+                AudioUrl = audioUrl,
+                AudioDuration = audioDuration,
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Type = "audio"
+            };
+            session.ChatHistory.Add(msg);
+            _streams[streamId] = session;
+
+            await Clients.Client(session.HostConnectionId).SendAsync("ReceiveMessage", msg);
+            foreach (var viewer in session.Viewers)
+            {
+                await Clients.Client(viewer.ConnectionId).SendAsync("ReceiveMessage", msg);
+            }
+        }
+
+        public async Task FetchChatHistory(string streamId)
+        {
+            if (!_streams.TryGetValue(streamId, out var session)) return;
+            await Clients.Caller.SendAsync("ChatHistory", session.ChatHistory);
+        }
+
+        public async Task UploadSubtitle(string streamId, string base64SubtitleData, string fileName)
+        {
+            if (!_streams.TryGetValue(streamId, out var session)) return;
+            if (session.HostConnectionId != Context.ConnectionId) return;
+
+            byte[] subtitleData = Convert.FromBase64String(base64SubtitleData);
+
+            var updatedSession = (
+                session.HostName,
+                session.VideoUrl,
+                session.HostConnectionId,
+                session.Viewers,
+                subtitleData,
+                fileName,
+                session.ChatHistory
+            );
+
+            _streams[streamId] = updatedSession;
+        }
+
+        public async Task FetchSubtitle(string streamId)
+        {
+            if (!_streams.TryGetValue(streamId, out var session)) return;
+            if (session.SubtitleData == null) return;
+
+            string base64Data = Convert.ToBase64String(session.SubtitleData);
+            await Clients.Caller.SendAsync("SubtitleData", base64Data, session.SubtitleFileName);
+        }
+
+        public async Task VideoAction(string streamId, string action, double time)
+        {
+            if (!_streams.TryGetValue(streamId, out var session)) return;
+
+            bool isParticipant = session.HostConnectionId == Context.ConnectionId ||
+                                 session.Viewers.Any(v => v.ConnectionId == Context.ConnectionId);
+            if (!isParticipant) return;
+
+            _playbackStates[streamId] = (action, time);
+
+            await Clients.Client(session.HostConnectionId).SendAsync("Action", action, time);
+            foreach (var viewer in session.Viewers)
+            {
+                await Clients.Client(viewer.ConnectionId).SendAsync("Action", action, time);
+            }
         }
 
         private void StartCleanupTimer(string streamId)
@@ -158,7 +228,8 @@ namespace VideoStreamApp.Hubs
                 Context.ConnectionId,
                 session.Viewers,
                 session.SubtitleData,
-                session.SubtitleFileName
+                session.SubtitleFileName,
+                session.ChatHistory
             );
 
             _streams[streamId] = updatedSession;
@@ -181,6 +252,12 @@ namespace VideoStreamApp.Hubs
 
             await Groups.AddToGroupAsync(Context.ConnectionId, streamId);
             await Clients.Caller.SendAsync("Joined", streamId, session.VideoUrl, session.HostName);
+
+            // On reconnect, send chat history as well
+            if (session.ChatHistory != null && session.ChatHistory.Count > 0)
+            {
+                await Clients.Caller.SendAsync("ChatHistory", session.ChatHistory);
+            }
         }
 
         public async Task GetCurrentPlaybackState(string streamId)
@@ -190,66 +267,6 @@ namespace VideoStreamApp.Hubs
                 await Clients.Caller.SendAsync("PlaybackState", (object)state.Action, (object)state.Time);
             }
         }
-
-        public async Task SendMessage(string streamId, string name, string message)
-        {
-            if (!_streams.ContainsKey(streamId)) return;
-
-            var timestamp = DateTime.UtcNow;
-            _chatMessages.AddOrUpdate(
-                streamId,
-                _ => new List<(string, string, DateTime, string, string)> { (name, message, timestamp, null, "text") },
-                (_, list) => { list.Add((name, message, timestamp, null, "text")); return list; }
-            );
-
-            var session = _streams[streamId];
-            var allConnectionIds = new List<string> { session.HostConnectionId };
-            allConnectionIds.AddRange(session.Viewers.Select(v => v.ConnectionId));
-            foreach (var connId in allConnectionIds.Distinct())
-            {
-                await Clients.Client(connId).SendAsync("Chat", name, message, timestamp);
-            }
-        }
-
-        public async Task SendAudioMessage(string streamId, string name, string base64audio, string ext)
-        {
-            if (!_streams.ContainsKey(streamId)) return;
-            var timestamp = DateTime.UtcNow;
-
-            _chatMessages.AddOrUpdate(
-                streamId,
-                _ => new List<(string, string, DateTime, string, string)> { (name, null, timestamp, base64audio, "audio") },
-                (_, list) => { list.Add((name, null, timestamp, base64audio, "audio")); return list; }
-            );
-
-            var session = _streams[streamId];
-            var allConnectionIds = new List<string> { session.HostConnectionId };
-            allConnectionIds.AddRange(session.Viewers.Select(v => v.ConnectionId));
-            foreach (var connId in allConnectionIds.Distinct())
-            {
-                await Clients.Client(connId).SendAsync("ChatAudio", name, base64audio, timestamp, ext);
-            }
-        }
-
-        public async Task GetChatHistory(string streamId)
-        {
-            if (_chatMessages.TryGetValue(streamId, out var list))
-            {
-                await Clients.Caller.SendAsync("ChatHistory", list.Select(msg =>
-                new
-                {
-                    name = msg.Item1,
-                    message = msg.Item2,
-                    timestamp = msg.Item3,
-                    audio = msg.Item4,
-                    type = msg.Item5,
-                    ext = msg.Item5 == "audio" ? "webm" : null
-                }));
-            }
-            else
-            {
-                await Clients.Caller.SendAsync("ChatHistory", Array.Empty<object>());
-            }
-        }
     }
+    
 }
