@@ -19,6 +19,9 @@ namespace VideoStreamApp.Hubs
         private static ConcurrentDictionary<string, (string Action, double Time)> _playbackStates = new();
         private static Random _rand = new();
 
+        private static ConcurrentDictionary<string, List<(string Name, string Message, DateTime Timestamp)>>
+            _chatMessages = new();
+
         public async Task CreateSession(string name, string videoUrl)
         {
             var streamId = GenerateStreamId();
@@ -72,10 +75,15 @@ namespace VideoStreamApp.Hubs
         public async Task VideoAction(string streamId, string action, double time)
         {
             if (!_streams.TryGetValue(streamId, out var session)) return;
-            if (session.HostConnectionId != Context.ConnectionId) return; 
+
+            bool isParticipant = session.HostConnectionId == Context.ConnectionId ||
+                                 session.Viewers.Any(v => v.ConnectionId == Context.ConnectionId);
+            if (!isParticipant) return;
 
             _playbackStates[streamId] = (action, time);
 
+            // Send to all participants, host + viewers
+            await Clients.Client(session.HostConnectionId).SendAsync("Action", action, time);
             foreach (var viewer in session.Viewers)
             {
                 await Clients.Client(viewer.ConnectionId).SendAsync("Action", action, time);
@@ -114,7 +122,7 @@ namespace VideoStreamApp.Hubs
         private void StartCleanupTimer(string streamId)
         {
             if (_cleanupTimers.ContainsKey(streamId)) return;
-            var timer = new System.Timers.Timer(2 * 60 * 1000); 
+            var timer = new System.Timers.Timer(2 * 60 * 1000);
             timer.Elapsed += (object? s, ElapsedEventArgs e) =>
             {
                 _streams.Remove(streamId);
@@ -148,7 +156,7 @@ namespace VideoStreamApp.Hubs
             var updatedSession = (
                 session.HostName,
                 session.VideoUrl,
-                Context.ConnectionId, 
+                Context.ConnectionId,
                 session.Viewers,
                 session.SubtitleData,
                 session.SubtitleFileName
@@ -183,6 +191,48 @@ namespace VideoStreamApp.Hubs
                 await Clients.Caller.SendAsync("PlaybackState", (object)state.Action, (object)state.Time);
             }
         }
+
+        // CHAT FEATURE: Add SendMessage method for chat support
+        public async Task SendMessage(string streamId, string name, string message)
+        {
+            if (!_streams.ContainsKey(streamId)) return;
+
+            var timestamp = DateTime.UtcNow;
+
+            // Optional: Store messages in history for fetch later if you want
+            _chatMessages.AddOrUpdate(
+                streamId,
+                _ => new List<(string, string, DateTime)> { (name, message, timestamp) },
+                (_, list) =>
+                {
+                    list.Add((name, message, timestamp));
+                    return list;
+                }
+            );
+
+            // Send to host and all viewers (including sender)
+            var session = _streams[streamId];
+            var allConnectionIds = new List<string> { session.HostConnectionId };
+            allConnectionIds.AddRange(session.Viewers.Select(v => v.ConnectionId));
+
+            foreach (var connId in allConnectionIds.Distinct())
+            {
+                await Clients.Client(connId).SendAsync("Chat", name, message, timestamp);
+            }
+        }
+
+        public async Task GetChatHistory(string streamId)
+        {
+            if (_chatMessages.TryGetValue(streamId, out var list))
+            {
+                await Clients.Caller.SendAsync("ChatHistory", list.Select(msg =>
+                    new { name = msg.Name, message = msg.Message, timestamp = msg.Timestamp }
+                ));
+            }
+            else
+            {
+                await Clients.Caller.SendAsync("ChatHistory", Array.Empty<object>());
+            }
+        }
     }
 }
-
