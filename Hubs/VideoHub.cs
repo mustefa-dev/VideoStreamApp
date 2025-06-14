@@ -19,8 +19,7 @@ namespace VideoStreamApp.Hubs
         private static ConcurrentDictionary<string, (string Action, double Time)> _playbackStates = new();
         private static Random _rand = new();
 
-        private static ConcurrentDictionary<string, List<(string Name, string Message, DateTime Timestamp)>>
-            _chatMessages = new();
+        private static ConcurrentDictionary<string, List<(string Name, string Message, DateTime Timestamp, string Audio, string Type)>> _chatMessages = new();
 
         public async Task CreateSession(string name, string videoUrl)
         {
@@ -76,6 +75,7 @@ namespace VideoStreamApp.Hubs
         {
             if (!_streams.TryGetValue(streamId, out var session)) return;
 
+            // --- Changed: Any participant can broadcast video actions (host or viewer) ---
             bool isParticipant = session.HostConnectionId == Context.ConnectionId ||
                                  session.Viewers.Any(v => v.ConnectionId == Context.ConnectionId);
             if (!isParticipant) return;
@@ -99,7 +99,6 @@ namespace VideoStreamApp.Hubs
                 {
                     await Clients.Client(viewer.ConnectionId).SendAsync("Ended");
                 }
-
                 StartCleanupTimer(toRemove.Key);
             }
             else
@@ -192,32 +191,43 @@ namespace VideoStreamApp.Hubs
             }
         }
 
-        // CHAT FEATURE: Add SendMessage method for chat support
         public async Task SendMessage(string streamId, string name, string message)
         {
             if (!_streams.ContainsKey(streamId)) return;
 
             var timestamp = DateTime.UtcNow;
-
-            // Optional: Store messages in history for fetch later if you want
             _chatMessages.AddOrUpdate(
                 streamId,
-                _ => new List<(string, string, DateTime)> { (name, message, timestamp) },
-                (_, list) =>
-                {
-                    list.Add((name, message, timestamp));
-                    return list;
-                }
+                _ => new List<(string, string, DateTime, string, string)> { (name, message, timestamp, null, "text") },
+                (_, list) => { list.Add((name, message, timestamp, null, "text")); return list; }
             );
 
-            // Send to host and all viewers (including sender)
             var session = _streams[streamId];
             var allConnectionIds = new List<string> { session.HostConnectionId };
             allConnectionIds.AddRange(session.Viewers.Select(v => v.ConnectionId));
-
             foreach (var connId in allConnectionIds.Distinct())
             {
                 await Clients.Client(connId).SendAsync("Chat", name, message, timestamp);
+            }
+        }
+
+        public async Task SendAudioMessage(string streamId, string name, string base64audio, string ext)
+        {
+            if (!_streams.ContainsKey(streamId)) return;
+            var timestamp = DateTime.UtcNow;
+
+            _chatMessages.AddOrUpdate(
+                streamId,
+                _ => new List<(string, string, DateTime, string, string)> { (name, null, timestamp, base64audio, "audio") },
+                (_, list) => { list.Add((name, null, timestamp, base64audio, "audio")); return list; }
+            );
+
+            var session = _streams[streamId];
+            var allConnectionIds = new List<string> { session.HostConnectionId };
+            allConnectionIds.AddRange(session.Viewers.Select(v => v.ConnectionId));
+            foreach (var connId in allConnectionIds.Distinct())
+            {
+                await Clients.Client(connId).SendAsync("ChatAudio", name, base64audio, timestamp, ext);
             }
         }
 
@@ -226,8 +236,15 @@ namespace VideoStreamApp.Hubs
             if (_chatMessages.TryGetValue(streamId, out var list))
             {
                 await Clients.Caller.SendAsync("ChatHistory", list.Select(msg =>
-                    new { name = msg.Name, message = msg.Message, timestamp = msg.Timestamp }
-                ));
+                new
+                {
+                    name = msg.Item1,
+                    message = msg.Item2,
+                    timestamp = msg.Item3,
+                    audio = msg.Item4,
+                    type = msg.Item5,
+                    ext = msg.Item5 == "audio" ? "webm" : null
+                }));
             }
             else
             {
